@@ -1,29 +1,20 @@
 #include "sqlite3.h"
-#include <QtSql>
 #include <fstream>
 #include <iostream>
 #include <string>
 
-int callback(void *NotUsed, int argc, char **argv, char **azColName) {
-  for (size_t i = 1; i < argc; i++) {
-    std::cout << azColName[i] << ": " << argv[i] << std::endl;
-  }
-  std::cout << std::endl;
-  return 0;
-}
-
 int main(int argc, char **argv) {
-  sqlite3 *db = 0; // хэндл объекта соединение к БД
+  sqlite3 *db = 0; // DB
   sqlite3_stmt *stmt = nullptr;
   char *err = 0;
   const char *data = "Callback function called";
   char *zErrMsg = 0;
   const char *sql;
-  // открываем соединение
+  // openning DB
   if (sqlite3_open("my_cosy_database.db", &db))
     std::cout << stderr << "Ошибка открытия/создания БД: " << sqlite3_errmsg(db)
               << std::endl;
-  // выполняем SQL
+  // SQL execute
   else {
     switch (*argv[1]) {
     case 's': {
@@ -34,42 +25,49 @@ int main(int argc, char **argv) {
 
         sqlite3_free(err);
       }
-      std::string source = argv[2];
-      std::string login = argv[3];
+      const char *source = argv[2];
+      const char *login = argv[3];
       std::string password;
       std::cin >> password;
+      const char *passwordchar = password.c_str();
       std::string sqstring = "INSERT INTO Passwords "
                              "('Source','Login','Password') VALUES (@0,@1,@2);";
-      QSqlQuery query(db);
-      sql = sqstring.c_str();
-      sqlite3_prepare_v2();
-      if (sqlite3_exec(db, sql, source, login, password)) {
-        std::cout << stderr << "Ошибка SQL: " << err << std::endl;
 
-        sqlite3_free(err);
-      }
-      // закрываем соединение
+      sql = sqstring.c_str();
+      sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+      sqlite3_bind_text(stmt, 1, source, -1, 0);
+      sqlite3_bind_text(stmt, 2, login, -1, 0);
+      sqlite3_bind_text(stmt, 3, passwordchar, -1, 0);
+      sqlite3_step(stmt);
+      // Closing DB
       sqlite3_close(db);
       sqlite3_finalize(stmt);
     } break;
+
     case 'l': {
-      std::string source = argv[2];
+      const char *source = argv[2];
       std::string sqstring = "SELECT * from Passwords WHERE SOURCE = @0;";
       sql = sqstring.c_str();
-      if (sqlite3_exec(db, sql, callback, (void *)data, &zErrMsg)) {
-        std::cout << stderr << "Ошибка SQL: " << err << std::endl;
-        ;
-        sqlite3_free(err);
+      sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+      int print = sqlite3_bind_text(stmt, 1, source, -1, 0);
+      while ((print = sqlite3_step(stmt)) == SQLITE_ROW) {
+        std::cout << "Login: " << sqlite3_column_text(stmt, 1) << std::endl;
+        std::cout << "Password: " << sqlite3_column_text(stmt, 2) << std::endl;
+        std::cout << std::endl;
       }
+      // Closing DB
+
+      sqlite3_close(db);
+      sqlite3_finalize(stmt);
     } break;
     default:
       return 0;
       break;
     }
-    std::cout << "Has " << argc << " arguements" << std::endl;
-    for (int i = 0; i < argc; i++) {
-      std::cout << argv[i] << std::endl;
-    }
+    /*   std::cout << "Has " << argc << " arguements" << std::endl;
+       for (int i = 0; i < argc; i++) {
+         std::cout << argv[i] << std::endl;
+       }*/
     return 0;
   }
 }
