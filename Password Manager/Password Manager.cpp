@@ -1,3 +1,4 @@
+#include "aes-master/structures.h"
 #include "sqlite3.h"
 #include <fstream>
 #include <iostream>
@@ -123,7 +124,7 @@ public:
   /* The AES encryption function
    * Organizes the confusion and diffusion steps into one function
    */
-  void AESEncrypt(unsigned char *message, unsigned char *expandedKey,
+  void AESEncrypt(const char *message, unsigned char *expandedKey,
                   unsigned char *encryptedMessage) {
     unsigned char state[16]; // Stores the first 16 bytes of original message
 
@@ -270,7 +271,7 @@ public:
   /* The AES decryption function
    * Organizes all the decryption steps into one function
    */
-  void AESDecrypt(unsigned char *encryptedMessage, unsigned char *expandedKey,
+  void AESDecrypt(const char *encryptedMessage, unsigned char *expandedKey,
                   unsigned char *decryptedMessage) {
     unsigned char state[16]; // Stores the first 16 bytes of encrypted message
 
@@ -310,9 +311,12 @@ int main(int argc, char **argv) {
   else {
     switch (*argv[1]) {
     case 's': {
-      std::ifstream keyfile("aes-master\\keyfile.txt");
-      const char *key, *encryptedpass;
-      std::getline(keyfile, key);
+      std::ifstream keyfile("aes-master\\keyfile.txt", std::ios::binary);
+      std::string keystring;
+      std::getline(keyfile, keystring);
+      unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
+
+      memcpy(key, keystring.c_str(), strlen(keystring.c_str()));
       sql = _strdup("CREATE TABLE IF NOT EXISTS Passwords(SOURCE TEXT NOT "
                     "NULL, LOGIN TEXT,PASSWORD TEXT );");
       if (sqlite3_exec(db, sql, 0, 0, &err)) {
@@ -324,7 +328,11 @@ int main(int argc, char **argv) {
       const char *login = argv[3];
       std::string password;
       std::cin >> password;
-      encryption::AESEncrypt(password.c_str(), key, encryptedpass);
+      unsigned char *encryptedpass =
+          new unsigned char[strlen(password.c_str()) + 1];
+
+      encryption encrypt;
+      encrypt.AESEncrypt(password.c_str(), key, encryptedpass);
       std::string sqstring = "INSERT INTO Passwords "
                              "('Source','Login','Password') VALUES (@0,@1,@2);";
 
@@ -332,7 +340,8 @@ int main(int argc, char **argv) {
       sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
       sqlite3_bind_text(stmt, 1, source, -1, 0);
       sqlite3_bind_text(stmt, 2, login, -1, 0);
-      sqlite3_bind_text(stmt, 3, encryptedpass, -1, 0);
+      const char *temppass = reinterpret_cast<const char *>(encryptedpass);
+      sqlite3_bind_text(stmt, 3, temppass, -1, 0);
       sqlite3_step(stmt);
       // Closing DB
       sqlite3_close(db);
@@ -341,19 +350,30 @@ int main(int argc, char **argv) {
 
     case 'l': {
       const char *source = argv[2];
-      std::ifstream keyfile("aes-master\\keyfile.txt");
-      const char *key, *decryptedpass, *encryptedpass;
-      std::getline(keyfile, key);
+      std::ifstream keyfile("aes-master\\keyfile.txt", std::ios::binary);
+      std::string keystring;
+      std::getline(keyfile, keystring);
+
+      unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
+
+      memcpy(key, keystring.c_str(), strlen(keystring.c_str()) + 1);
       std::string sqstring = "SELECT * from Passwords WHERE SOURCE = @0;";
       sql = sqstring.c_str();
       sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
       int print = sqlite3_bind_text(stmt, 1, source, -1, 0);
       while ((print = sqlite3_step(stmt)) == SQLITE_ROW) {
         std::cout << "Login: " << sqlite3_column_text(stmt, 1) << std::endl;
-        encryptedpass = sqlite3_column_text(stmt, 2);
-        decryption::AESDecrypt(sqlite3_column_text(stmt, 2), key,
-                               decryptedpass);
-        std::cout << "Password: " << decryptedpass <<" "<< encryptedpass std::endl;
+
+        const unsigned char *encryptedpass = sqlite3_column_text(stmt, 2);
+        unsigned char *decryptedpass = new unsigned char[strlen(
+            reinterpret_cast<const char *>(encryptedpass))];
+        std::string temppass =
+            std::string(reinterpret_cast<const char *>(encryptedpass));
+
+        decryption decrypt;
+        decrypt.AESDecrypt(temppass.c_str(), key, decryptedpass);
+        std::cout << "Password: " << decryptedpass
+                  << "\nand encrypted: " << encryptedpass << std::endl;
         std::cout << std::endl;
       }
       // Closing DB
@@ -367,7 +387,7 @@ int main(int argc, char **argv) {
     }
     /*   std::cout << "Has " << argc << " arguements" << std::endl;
        for (int i = 0; i < argc; i++) {
-         std::cout << argv[i] << std::endl;
+             std::cout << argv[i] << std::endl;
        }*/
     return 0;
   }
