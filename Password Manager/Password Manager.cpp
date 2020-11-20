@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     if (argc > 1) {
       switch (*argv[1]) {
       case 's': {
-        std::ifstream keyfile("aes-master\\keyfile", std::ios::binary);
+        std::ifstream keyfile("keyfile", std::ios::binary);
         std::string keystring;
         std::getline(keyfile, keystring);
         unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
@@ -30,41 +30,42 @@ int main(int argc, char **argv) {
         sql = _strdup("CREATE TABLE IF NOT EXISTS Passwords(SOURCE TEXT NOT "
                       "NULL, LOGIN TEXT,PASSWORD TEXT );");
         if (sqlite3_exec(db, sql, 0, 0, &err)) {
-          std::cout << stderr << "Îøèáêà SQL: " << err << std::endl;
+          std::cout << stderr << "Error SQL: " << err << std::endl;
 
           sqlite3_free(err);
-        }
-        const char *source = argv[2];
-        const char *login = argv[3];
-        std::string password;
-        std::cin >> password;
-        unsigned char *encryptedpass =
-            new unsigned char[strlen(password.c_str())];
-        unsigned char *temppas = new unsigned char[strlen(password.c_str())];
-        strcpy((char *)temppas, password.c_str());
-        unsigned int outlen = 0;
-        AES encryp;
-        encryptedpass = encryp.EncryptECB(temppas, strlen((char *)temppas) + 1,
-                                          key, outlen);
-        cout << encryptedpass << endl;
-        std::string sqstring =
-            "INSERT INTO Passwords "
-            "('Source','Login','Password') VALUES (@0,@1,@2);";
+        } else {
+          const char *source = argv[2];
+          const char *login = argv[3];
+          std::string password;
+          std::cin >> password;
+          unsigned char *encryptedpass =
+              new unsigned char[strlen(password.c_str())];
+          unsigned char *temppas = new unsigned char[strlen(password.c_str())];
+          strcpy((char *)temppas, password.c_str());
+          unsigned int outlen = 0;
+          AES encryp;
+          encryptedpass = encryp.EncryptECB(
+              temppas, strlen((char *)temppas) + 1, key, outlen);
+          cout << encryptedpass << endl;
+          std::string sqstring =
+              "INSERT INTO Passwords "
+              "('Source', 'Login', 'Password') VALUES (@0, @1, @2);";
 
-        sql = sqstring.c_str();
-        sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-        sqlite3_bind_text(stmt, 1, source, -1, 0);
-        sqlite3_bind_text(stmt, 2, login, -1, 0);
-        sqlite3_bind_text(stmt, 3, (const char *)encryptedpass, -1, 0);
-        sqlite3_step(stmt);
-        // Closing DB
-        sqlite3_close(db);
-        sqlite3_finalize(stmt);
+          sql = sqstring.c_str();
+          sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+          sqlite3_bind_text(stmt, 1, source, -1, 0);
+          sqlite3_bind_text(stmt, 2, login, -1, 0);
+          sqlite3_bind_text(stmt, 3, (const char *)encryptedpass, -1, 0);
+          sqlite3_step(stmt);
+          // Closing DB
+          sqlite3_close(db);
+          sqlite3_finalize(stmt);
+        }
       } break;
 
       case 'l': {
         const char *source = argv[2];
-        std::ifstream keyfile("aes-master\\keyfile", std::ios::binary);
+        std::ifstream keyfile("keyfile", std::ios::binary);
         std::string keystring;
         std::getline(keyfile, keystring);
 
@@ -80,7 +81,7 @@ int main(int argc, char **argv) {
 
           const unsigned char *encryptedpass = sqlite3_column_text(stmt, 2);
           unsigned char *encryptemp =
-              new unsigned char [strlen((char *)encryptedpass)];
+              new unsigned char[strlen((char *)encryptedpass)];
           memcpy(encryptemp, encryptedpass, strlen((char *)encryptedpass));
           unsigned char *decryptedpass =
               new unsigned char[strlen((char *)encryptedpass)];
