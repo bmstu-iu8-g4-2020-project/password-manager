@@ -1,5 +1,6 @@
 #include "Third-party\\AES\\AES.h"
 #include "Third-party\\Sqlite3\\sqlite3.h"
+#include <Windows.h>
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -241,20 +242,28 @@ void hidden(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
                                      // and closing database
 };
 
-void toClipboard(const char *&s) { // Code related to copying to Clipboard
-                                   // (currently doesn't work)
-  OpenClipboard(0);
-  EmptyClipboard();
-  HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, strlen(s));
-  if (!hg) {
-    CloseClipboard();
-    return;
-  }
-  memcpy(GlobalLock(hg), s, strlen(s));
-  GlobalUnlock(hg);
-  SetClipboardData(CF_TEXT, hg);
-  CloseClipboard();
-  GlobalFree(hg);
+void toClipboard(const char *s) { // Code related to copying to Clipboard
+                                  // (currently doesn't work)
+  HGLOBAL hText;
+  CHAR *pText;
+  char *text = (char *)s;
+  SIZE_T nSize = strlen(text) + 1;
+
+  hText = GlobalAlloc(GHND | GMEM_DDESHARE, nSize);
+  if (hText) {
+    if (pText = (CHAR *)GlobalLock(hText)) {
+      strcpy(pText, text);
+      GlobalUnlock(hText);
+      if (OpenClipboard(NULL)) {
+        EmptyClipboard();
+        SetClipboardData(CF_TEXT, hText);
+        CloseClipboard();
+      } else
+        std::cout << "Error: Could not open the clipboard" << std::endl;
+    }
+    GlobalFree(hText);
+  } else
+    std::cout << "Error: Could not allocate buffer\n";
 }
 void copy(
     std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
@@ -272,23 +281,30 @@ void copy(
          strlen(keystring.c_str()) + 1); // Copying key
 
   std::string sqstring =
-      "SELECT PASSWORD from Passwords WHERE SOURCE = @0, LOGIN = @1;";
+      "SELECT PASSWORD from Passwords WHERE SOURCE = @0 AND LOGIN = @1;";
   const char *sql = sqstring.c_str();
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL); // Opening database
   sqlite3_bind_text(stmt, 1, data[0], -1, 0);
   int print = sqlite3_bind_text(stmt, 2, data[1], -1, 0);
+  bool found = false;
   while ((print = sqlite3_step(stmt)) == SQLITE_ROW) {
-
+    found++;
     // Prepairing password for decryption
 
     const unsigned char *encryptedpass = sqlite3_column_text(
-        stmt, 2); // Reading encrypted password from database
+        stmt, 0); // Reading encrypted password from database
 
     unsigned char *decryptedpass =
         toDecrypt(encryptedpass, key); // char* for decrypted password
 
     // Decryption process
-    toClipboard((const char *&)decryptedpass);
+    toClipboard((const char *)decryptedpass);
+    break;
+  }
+  if (found) {
+    std::cout << "Copied" << std::endl;
+  } else {
+    std::cout << "No entry found" << std::endl;
   }
   sqlite3_close(db);
   sqlite3_finalize(stmt); // Closing DB
@@ -401,7 +417,6 @@ int main(int argc, char **argv) {
             std::begin(names), std::end(names), std::begin(tempnames),
             [&](const std::string &str) { return (char *)str.c_str(); });
         copy(tempnames, db, stmt, err);
-        std::cout << "Copied" << std::endl;
         break;
       }
       case 'e': {
