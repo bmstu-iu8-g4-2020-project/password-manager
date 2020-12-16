@@ -1,5 +1,6 @@
 #include "Third-party\\AES\\AES.h"
 #include "Third-party\\Sqlite3\\sqlite3.h"
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
@@ -11,9 +12,71 @@
 #include <tchar.h>
 #include <vector>
 #include <winuser.h>
+
 #pragma warning(disable : 4996)
 
-void save(char **data, sqlite3 *db, sqlite3_stmt *stmt,
+unsigned char *toEncrypt(std::string word,
+                         unsigned char *key) // Encryption of strings
+{
+  unsigned char *encryptedword =
+      new unsigned char[strlen(word.c_str())]; // char* for encrypted password
+
+  unsigned char *tempword =
+      new unsigned char[strlen(word.c_str()) + 1]; // Copy of original password
+
+  strcpy((char *)tempword, word.c_str()); // Copying original password
+
+  // Encryption process
+  unsigned int outlen = 0;
+
+  AES encryp;
+  encryptedword = encryp.EncryptECB(tempword, strlen((char *)tempword) + 1, key,
+                                    outlen); // Encrypting password
+  return encryptedword;
+}
+unsigned char *toEncrypt(std::vector<char> word,
+                         unsigned char *key) // Encryption of vector<char>
+{
+  unsigned char *encryptedword =
+      new unsigned char[word.size()]; // char* for encrypted password
+
+  unsigned char *tempword =
+      new unsigned char[word.size() + 1]; // Copy of original password
+  for (size_t i = 0; i < word.size(); i++) {
+    tempword[i] = word[i];
+  }
+
+  // Encryption process
+  unsigned int outlen = 0;
+
+  AES encryp;
+  encryptedword = encryp.EncryptECB(tempword, strlen((char *)tempword) + 1, key,
+                                    outlen); // Encrypting password
+  return encryptedword;
+}
+unsigned char *
+toDecrypt(const unsigned char *encryptedword,
+          unsigned char *key) // Decryption of const unsigned char* (used only
+                              // when we get data out of DB)
+{
+
+  unsigned char *encryptemp =
+      new unsigned char[strlen((char *)encryptedword)]; // Copy for decryption
+
+  memcpy(encryptemp, encryptedword,
+         strlen((char *)encryptedword)); // Copying encrypted password
+
+  unsigned char *decryptedword = new unsigned char[strlen(
+      (char *)encryptedword)]; // char* for decrypted password
+
+  // Decryption process
+  AES decryp;
+  decryptedword =
+      decryp.DecryptECB(encryptemp, strlen((char *)encryptedword) + 1, key);
+  return decryptedword;
+}
+
+void save(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
           char *err) // Code related to saving (name for a place, name for
                      // login, password) into a database
 {
@@ -23,7 +86,7 @@ void save(char **data, sqlite3 *db, sqlite3_stmt *stmt,
   std::getline(keyfile, keystring);
   unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
 
-  memcpy(key, keystring.c_str(), strlen(keystring.c_str()));
+  memcpy(key, keystring.c_str(), strlen(keystring.c_str()) + 1);
   // Creating a table if it doesn't exist already
   const char *sql =
       _strdup("CREATE TABLE IF NOT EXISTS Passwords(SOURCE TEXT NOT "
@@ -41,20 +104,8 @@ void save(char **data, sqlite3 *db, sqlite3_stmt *stmt,
     std::cin >> password;
     // Prepairing password for encryption
 
-    unsigned char *encryptedpass = new unsigned char[strlen(
-        password.c_str())]; // char* for encrypted password
+    unsigned char *encryptedpass = toEncrypt(password, key);
 
-    unsigned char *temppas = new unsigned char[strlen(password.c_str()) +
-                                               1]; // Copy of original password
-
-    strcpy((char *)temppas, password.c_str()); // Copying original password
-
-    // Encryption process
-    unsigned int outlen = 0;
-
-    AES encryp;
-    encryptedpass = encryp.EncryptECB(temppas, strlen((char *)temppas) + 1, key,
-                                      outlen); // Encrypting password
     cout << encryptedpass << endl;
 
     // Creting a string for execution
@@ -95,19 +146,12 @@ void print(unsigned char *key, sqlite3 *db, sqlite3_stmt *stmt,
     const unsigned char *encryptedpass = sqlite3_column_text(
         stmt, 2); // Reading encrypted password from database
 
-    unsigned char *encryptemp =
-        new unsigned char[strlen((char *)encryptedpass)]; // Copy for decryption
-
-    memcpy(encryptemp, encryptedpass,
-           strlen((char *)encryptedpass)); // Copying encrypted password
-
     unsigned char *decryptedpass = new unsigned char[strlen(
         (char *)encryptedpass)]; // char* for decrypted password
 
     // Decryption process
     AES decryp;
-    decryptedpass =
-        decryp.DecryptECB(encryptemp, strlen((char *)encryptedpass) + 1, key);
+    decryptedpass = toDecrypt(encryptedpass, key);
 
     cout << decryptedpass << endl; // Printing password
     std::cout << "Date: " << sqlite3_column_text(stmt, 3) << std::endl;
@@ -126,106 +170,106 @@ void printHidden(unsigned char *key, sqlite3 *db, sqlite3_stmt *stmt,
     std::cout << "Login: " << sqlite3_column_text(stmt, 1)
               << std::endl; // Printing login
 
-    // Prepairing password for decryption
-
     const unsigned char *encryptedpass = sqlite3_column_text(
         stmt, 2); // Reading encrypted password from database
 
-    unsigned char *encryptemp =
-        new unsigned char[strlen((char *)encryptedpass)]; // Copy for decryption
-
-    memcpy(encryptemp, encryptedpass,
-           strlen((char *)encryptedpass)); // Copying encrypted password
-
-    unsigned char *decryptedpass = new unsigned char[strlen(
-        (char *)encryptedpass)]; // char* for decrypted password
-
-    // Decryption process
-    AES decryp;
-    decryptedpass =
-        decryp.DecryptECB(encryptemp, strlen((char *)encryptedpass) + 1, key);
+    unsigned char *decryptedpass = toDecrypt(encryptedpass, key);
     unsigned char *hiddenPass =
         new unsigned char[strlen((char *)decryptedpass) + (rand() % 5)];
+
     for (size_t i = 0; i < strlen((char *)hiddenPass); i++) {
       hiddenPass[i] = '*';
     }
-    std::cout << hiddenPass << endl; // Printing password
+    std::cout << "Password (Hidden): " << hiddenPass
+              << endl; // Printing password
     std::cout << "Date: " << sqlite3_column_text(stmt, 3) << std::endl;
   }
-
   sqlite3_close(db);
   sqlite3_finalize(stmt); // Closing DB
 };
 
-void load(
-    char **data, sqlite3 *db, sqlite3_stmt *stmt,
-    char *err) //  Code related to loading ( name for
-               // login, password) from a database via given (name for a place)
+void load(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
+          char *err) //  Code related to loading ( name for
+                     // login, password) from a database via given (name for
+                     // a place)
 {
-  const char *source = data[0];
-  std::ifstream keyfile("keyfile", std::ios::binary); // Loads a key in binary
+  std::ifstream keyfile("keyfile",
+                        std::ios::binary); // Loads a key in binary
   std::string keystring;
   std::getline(keyfile, keystring); // Loading key
 
   unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
 
-  memcpy(key, keystring.c_str(), strlen(keystring.c_str()) + 1); // Copying key
+  memcpy(key, keystring.c_str(),
+         strlen(keystring.c_str()) + 1); // Copying key
 
+  unsigned char *source = (unsigned char *)data[0];
   std::string sqstring = "SELECT * from Passwords WHERE SOURCE = @0;";
+
   const char *sql = sqstring.c_str();
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL); // Opening database
 
   print(key, db, stmt,
-        source); // Printing (name of login, password) and closing database
+        (const char *)source); // Printing (name of login, password) and
+                               // closing database
 };
 
-void hidden(char **data, sqlite3 *db, sqlite3_stmt *stmt,
+void hidden(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
             char *err) //  Code related to loading ( name for
-                       // login) (password but hidden [Instead shows *** with
-                       // random amount of symbols])from a database via given
-                       // (name for a place)
+                       // login) (password but hidden [Instead shows ***
+                       // with random amount of symbols])from a database via
+                       // given (name for a place)
 {
-  const char *source = data[0];
-  std::ifstream keyfile("keyfile", std::ios::binary); // Loads a key in binary
+  std::ifstream keyfile("keyfile",
+                        std::ios::binary); // Loads a key in binary
   std::string keystring;
   std::getline(keyfile, keystring); // Loading key
 
   unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
 
-  memcpy(key, keystring.c_str(), strlen(keystring.c_str()) + 1); // Copying key
+  memcpy(key, keystring.c_str(),
+         strlen(keystring.c_str()) + 1); // Copying key
 
+  unsigned char *source = (unsigned char *)data[0];
   std::string sqstring = "SELECT * from Passwords WHERE SOURCE = @0;";
+
   const char *sql = sqstring.c_str();
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL); // Opening database
 
-  printHidden(
-      key, db, stmt,
-      source); // Printing (name of login, password) and closing database
+  printHidden(key, db, stmt,
+              (const char *)source); // Printing (name of login, password)
+                                     // and closing database
 };
 
-void toClipboard(unsigned char *s) {
+void toClipboard(const char *&s) { // Code related to copying to Clipboard
+                                   // (currently doesn't work)
   OpenClipboard(0);
   EmptyClipboard();
-  HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, strlen((char *)s));
+  HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, strlen(s));
   if (!hg) {
     CloseClipboard();
     return;
   }
-  memcpy(GlobalLock(hg), s, strlen((char *)s));
+  memcpy(GlobalLock(hg), s, strlen(s));
   GlobalUnlock(hg);
   SetClipboardData(CF_TEXT, hg);
   CloseClipboard();
   GlobalFree(hg);
 }
-void copy(char **data, sqlite3 *db, sqlite3_stmt *stmt, char *err) {
+void copy(
+    std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
+    char *err) // Code related to prepairing data to be copied to Clipboard
+{
 
-  std::ifstream keyfile("keyfile", std::ios::binary); // Loads a key in binary
+  std::ifstream keyfile("keyfile",
+                        std::ios::binary); // Loads a key in binary
   std::string keystring;
   std::getline(keyfile, keystring); // Loading key
 
   unsigned char *key = new unsigned char[strlen(keystring.c_str()) + 1];
 
-  memcpy(key, keystring.c_str(), strlen(keystring.c_str()) + 1); // Copying key
+  memcpy(key, keystring.c_str(),
+         strlen(keystring.c_str()) + 1); // Copying key
 
   std::string sqstring =
       "SELECT PASSWORD from Passwords WHERE SOURCE = @0, LOGIN = @1;";
@@ -240,25 +284,18 @@ void copy(char **data, sqlite3 *db, sqlite3_stmt *stmt, char *err) {
     const unsigned char *encryptedpass = sqlite3_column_text(
         stmt, 2); // Reading encrypted password from database
 
-    unsigned char *encryptemp =
-        new unsigned char[strlen((char *)encryptedpass)]; // Copy for decryption
-
-    memcpy(encryptemp, encryptedpass,
-           strlen((char *)encryptedpass)); // Copying encrypted password
-
-    unsigned char *decryptedpass = new unsigned char[strlen(
-        (char *)encryptedpass)]; // char* for decrypted password
+    unsigned char *decryptedpass =
+        toDecrypt(encryptedpass, key); // char* for decrypted password
 
     // Decryption process
-    AES decryp;
-    decryptedpass =
-        decryp.DecryptECB(encryptemp, strlen((char *)encryptedpass) + 1, key);
-    toClipboard(decryptedpass);
+    toClipboard((const char *&)decryptedpass);
   }
   sqlite3_close(db);
   sqlite3_finalize(stmt); // Closing DB
 };
-void loadDate() {
+
+void loadDate() // Loads last date from file
+{
   std::ifstream datefile("datefile.txt");
   std::string date;
   getline(datefile, date);
@@ -266,7 +303,8 @@ void loadDate() {
   datefile.close();
 };
 
-void saveDate() {
+void saveDate() // Saves current date, overrides old one
+{
   std::ofstream datefile("datefile.txt");
 
   // current date/time based on current system
@@ -278,10 +316,10 @@ void saveDate() {
 };
 
 int main(int argc, char **argv) {
-  loadDate();
-  saveDate();
+  loadDate(); // Showing last entry
+  saveDate(); // Saving current entry
   char command;
-  std::string names[2];
+  std::vector<std::string> names(2);
   sqlite3 *db = 0; // DB
   sqlite3_stmt *stmt = nullptr;
   char *err = 0;
@@ -294,21 +332,21 @@ int main(int argc, char **argv) {
               << std::endl;
   // SQL execute
   else { // Changed to commands in console
-    std::cout
-        << "Write a command." << std::endl
-        << "s = saves[name for a place, name for login, "
-           "password] to database."
-        << std::endl
-        << "l = loads [name for a login, password] "
-           "from database. "
-        << std::endl
-        << "h = loads [name for a login, password (hidden, only "
-           "shows ***)] "
-           "from database."
-        << std::endl
-        << "c = copy [password] via given [name for a place,name for a login]"
-        << std::endl
-        << "e = exits program" << std::endl;
+    std::cout << "Write a command." << std::endl
+              << "s = saves[name for a place, name for login, "
+                 "password] to database."
+              << std::endl
+              << "l = loads [name for a login, password] "
+                 "from database. "
+              << std::endl
+              << "h = loads [name for a login, password (hidden, only "
+                 "shows ***)] "
+                 "from database."
+              << std::endl
+              << "c = copy [password] via given [name for a place,name for "
+                 "a login]"
+              << std::endl
+              << "e = exits program" << std::endl;
 
     std::cin >> command;
 
@@ -320,17 +358,22 @@ int main(int argc, char **argv) {
         std::cin >> names[0];
         std::cout << "Please write [name for a login]: ";
         std::cin >> names[1];
-        char **tempnames = new char *[2];
-        tempnames[0] = &names[0][0];
-        tempnames[1] = &names[1][0];
+        std::vector<char *> tempnames(2);
+        tempnames.resize(names.size(), nullptr);
+        std::transform(
+            std::begin(names), std::end(names), std::begin(tempnames),
+            [&](const std::string &str) { return (char *)str.c_str(); });
         save(tempnames, db, stmt, err);
       } break;
       case 'l': {
         // loading (name for a login, password) from database.
         std::cout << "Please write [name for a place]: ";
         std::cin >> names[0];
-        char **tempnames = new char *[2];
-        tempnames[0] = &names[0][0];
+        std::vector<char *> tempnames(2);
+        tempnames.resize(names.size(), nullptr);
+        std::transform(
+            std::begin(names), std::end(names), std::begin(tempnames),
+            [&](const std::string &str) { return (char *)str.c_str(); });
         load(tempnames, db, stmt, err);
       } break;
       case 'h': {
@@ -338,8 +381,11 @@ int main(int argc, char **argv) {
         // with random amount of symbols]) from database.
         std::cout << "Please write [name for a place]: ";
         std::cin >> names[0];
-        char **tempnames = new char *[2];
-        tempnames[0] = &names[0][0];
+        std::vector<char *> tempnames(2);
+        tempnames.resize(names.size(), nullptr);
+        std::transform(
+            std::begin(names), std::end(names), std::begin(tempnames),
+            [&](const std::string &str) { return (char *)str.c_str(); });
         hidden(tempnames, db, stmt, err);
         break;
       }
@@ -349,9 +395,11 @@ int main(int argc, char **argv) {
         std::cin >> names[0];
         std::cout << "Please write [name for a login]: ";
         std::cin >> names[1];
-        char **tempnames = new char *[2];
-        tempnames[0] = &names[0][0];
-        tempnames[1] = &names[1][0];
+        std::vector<char *> tempnames(2);
+        tempnames.resize(names.size(), nullptr);
+        std::transform(
+            std::begin(names), std::end(names), std::begin(tempnames),
+            [&](const std::string &str) { return (char *)str.c_str(); });
         copy(tempnames, db, stmt, err);
         std::cout << "Copied" << std::endl;
         break;
@@ -366,14 +414,8 @@ int main(int argc, char **argv) {
         break;
       }
       std::cout << "Please, write another command." << std::endl;
-      std::cin >> command;
+      cin >> command;
     }
-
-    // Part of code used for checking arguements
-    /*   std::cout << "Has " << argc << " arguements" << std::endl;
-       for (int i = 0; i < argc; i++) {
-                     std::cout << data[i] << std::endl;
-       }*/
     return 0;
   }
 }
