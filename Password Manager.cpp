@@ -25,7 +25,8 @@ unsigned char *toEncrypt(std::string word,
   unsigned char *tempword =
       new unsigned char[strlen(word.c_str()) + 1]; // Copy of original password
 
-  strcpy((char *)tempword, word.c_str()); // Copying original password
+  memcpy((char *)tempword, word.c_str(),
+         strlen(word.c_str())); // Copying original password
 
   // Encryption process
   unsigned int outlen = 0;
@@ -33,32 +34,10 @@ unsigned char *toEncrypt(std::string word,
   AES encryp;
   encryptedword = encryp.EncryptECB(tempword, strlen((char *)tempword) + 1, key,
                                     outlen); // Encrypting password
-  delete[] encryptedword;
   delete[] tempword;
   return encryptedword;
 }
-unsigned char *toEncrypt(std::vector<char> word,
-                         unsigned char *key) // Encryption of vector<char>
-{
-  unsigned char *encryptedword =
-      new unsigned char[word.size()]; // char* for encrypted password
 
-  unsigned char *tempword =
-      new unsigned char[word.size() + 1]; // Copy of original password
-  for (size_t i = 0; i < word.size(); i++) {
-    tempword[i] = word[i];
-  }
-
-  // Encryption process
-  unsigned int outlen = 0;
-
-  AES encryp;
-  encryptedword = encryp.EncryptECB(tempword, strlen((char *)tempword) + 1, key,
-                                    outlen); // Encrypting password
-  delete[] encryptedword;
-  delete[] tempword;
-  return encryptedword;
-}
 unsigned char *
 toDecrypt(const unsigned char *encryptedword,
           unsigned char *key) // Decryption of const unsigned char* (used only
@@ -79,7 +58,6 @@ toDecrypt(const unsigned char *encryptedword,
   decryptedword =
       decryp.DecryptECB(encryptemp, strlen((char *)encryptedword) + 1, key);
   delete[] encryptemp;
-  delete[] decryptedword;
   return decryptedword;
 }
 
@@ -97,11 +75,11 @@ void save(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
   // Creating a table if it doesn't exist already
   const char *sql =
       _strdup("CREATE TABLE IF NOT EXISTS Passwords(SOURCE TEXT NOT "
-              "NULL, LOGIN TEXT,PASSWORD TEXT, DATE TEXT);");
+              "NULL, LOGIN TEXT,PASSWORD TEXT, TIMESTAMP TEXT);");
 
   if (sqlite3_exec(db, sql, 0, 0, &err)) { // In case of error, we exit
     std::cout << stderr << "Error SQL: " << err << std::endl;
-
+    return;
     sqlite3_free(err);
   } else {
     const char *source = data[0];
@@ -118,7 +96,7 @@ void save(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
     // Creting a string for execution
     std::string sqstring =
         "INSERT INTO Passwords "
-        "('Source', 'Login', 'Password', 'Date') VALUES (@0, @1, @2, @3);";
+        "('Source', 'Login', 'Password', 'Timestamp') VALUES (@0, @1, @2, @3);";
     // current date/time based on current system
     time_t now = time(0);
 
@@ -197,7 +175,7 @@ void printHidden(unsigned char *key, sqlite3 *db, sqlite3_stmt *stmt,
     }
     std::cout << "Password (Hidden): " << hiddenPass
               << endl; // Printing password
-    std::cout << "Date: " << sqlite3_column_text(stmt, 3) << std::endl;
+    std::cout << "Timestamp: " << sqlite3_column_text(stmt, 3) << std::endl;
     delete[] encryptedpass;
     delete[] decryptedpass;
     delete[] hiddenPass;
@@ -222,7 +200,8 @@ void load(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
          strlen(keystring.c_str()) + 1); // Copying key
 
   unsigned char *source = (unsigned char *)data[0];
-  std::string sqstring = "SELECT * from Passwords WHERE SOURCE = @0;";
+  std::string sqstring = "SELECT Source, Login, Password, Timestamp from "
+                         "Passwords WHERE SOURCE = @0;";
 
   const char *sql = sqstring.c_str();
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL); // Opening database
@@ -252,7 +231,8 @@ void hidden(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
          strlen(keystring.c_str()) + 1); // Copying key
 
   unsigned char *source = (unsigned char *)data[0];
-  std::string sqstring = "SELECT * from Passwords WHERE SOURCE = @0;";
+  std::string sqstring = "SELECT Source, Login, Password, Timestamp from "
+                         "Passwords WHERE SOURCE = @0;";
 
   const char *sql = sqstring.c_str();
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL); // Opening database
@@ -409,6 +389,10 @@ int main(int argc, char **argv) {
             std::begin(names), std::end(names), std::begin(tempnames),
             [&](const std::string &str) { return (char *)str.c_str(); });
         save(tempnames, db, stmt, err);
+        if (err != 0) {
+          std::cout << stderr << err << endl;
+          return 0;
+        }
       } break;
       case 'l': {
         // loading (name for a login, password) from database.
