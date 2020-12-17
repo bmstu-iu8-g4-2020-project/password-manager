@@ -33,6 +33,8 @@ unsigned char *toEncrypt(std::string word,
   AES encryp;
   encryptedword = encryp.EncryptECB(tempword, strlen((char *)tempword) + 1, key,
                                     outlen); // Encrypting password
+  delete[] encryptedword;
+  delete[] tempword;
   return encryptedword;
 }
 unsigned char *toEncrypt(std::vector<char> word,
@@ -53,6 +55,8 @@ unsigned char *toEncrypt(std::vector<char> word,
   AES encryp;
   encryptedword = encryp.EncryptECB(tempword, strlen((char *)tempword) + 1, key,
                                     outlen); // Encrypting password
+  delete[] encryptedword;
+  delete[] tempword;
   return encryptedword;
 }
 unsigned char *
@@ -74,6 +78,8 @@ toDecrypt(const unsigned char *encryptedword,
   AES decryp;
   decryptedword =
       decryp.DecryptECB(encryptemp, strlen((char *)encryptedword) + 1, key);
+  delete[] encryptemp;
+  delete[] decryptedword;
   return decryptedword;
 }
 
@@ -129,6 +135,12 @@ void save(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
     // Closing DB
     sqlite3_close(db);
     sqlite3_finalize(stmt);
+    delete[] source;
+    delete[] login;
+    delete[] encryptedpass;
+    delete[] dt;
+    delete[] sql;
+    delete[] key;
   }
 };
 
@@ -156,6 +168,8 @@ void print(unsigned char *key, sqlite3 *db, sqlite3_stmt *stmt,
 
     cout << decryptedpass << endl; // Printing password
     std::cout << "Date: " << sqlite3_column_text(stmt, 3) << std::endl;
+    delete[] encryptedpass;
+    delete[] decryptedpass;
   }
   sqlite3_close(db);
   sqlite3_finalize(stmt); // Closing DB
@@ -184,6 +198,9 @@ void printHidden(unsigned char *key, sqlite3 *db, sqlite3_stmt *stmt,
     std::cout << "Password (Hidden): " << hiddenPass
               << endl; // Printing password
     std::cout << "Date: " << sqlite3_column_text(stmt, 3) << std::endl;
+    delete[] encryptedpass;
+    delete[] decryptedpass;
+    delete[] hiddenPass;
   }
   sqlite3_close(db);
   sqlite3_finalize(stmt); // Closing DB
@@ -213,6 +230,9 @@ void load(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
   print(key, db, stmt,
         (const char *)source); // Printing (name of login, password) and
                                // closing database
+  delete[] key;
+  delete[] source;
+  delete[] sql;
 };
 
 void hidden(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
@@ -240,6 +260,9 @@ void hidden(std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
   printHidden(key, db, stmt,
               (const char *)source); // Printing (name of login, password)
                                      // and closing database
+  delete[] key;
+  delete[] source;
+  delete[] sql;
 };
 
 void toClipboard(const char *s) { // Code related to copying to Clipboard
@@ -264,6 +287,7 @@ void toClipboard(const char *s) { // Code related to copying to Clipboard
     GlobalFree(hText);
   } else
     std::cout << "Error: Could not allocate buffer\n";
+  delete[] text;
 }
 void copy(
     std::vector<char *> data, sqlite3 *db, sqlite3_stmt *stmt,
@@ -299,6 +323,8 @@ void copy(
 
     // Decryption process
     toClipboard((const char *)decryptedpass);
+    delete[] encryptedpass;
+    delete[] decryptedpass;
     break;
   }
   if (found) {
@@ -308,6 +334,8 @@ void copy(
   }
   sqlite3_close(db);
   sqlite3_finalize(stmt); // Closing DB
+  delete[] key;
+  delete[] sql;
 };
 
 void loadDate() // Loads last date from file
@@ -329,6 +357,7 @@ void saveDate() // Saves current date, overrides old one
   // convert now to string form
   char *dt = ctime(&now);
   datefile << dt << "\n";
+  delete[] dt;
 };
 
 int main(int argc, char **argv) {
@@ -431,6 +460,11 @@ int main(int argc, char **argv) {
       std::cout << "Please, write another command." << std::endl;
       cin >> command;
     }
-    return 0;
   }
+  delete[] db; // DB
+  delete[] stmt;
+  delete[] err;
+  delete[] data;
+  delete[] zErrMsg;
+  return 0;
 }
